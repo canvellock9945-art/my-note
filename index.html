@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>スマートメモ帳</title>
+  <style>
+    /* ==========================================
+       CSS Variables & Theme Setup
+       ========================================== */
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #1c1c1e;
+      --sub-text-color: #8e8e93;
+      --panel-bg: #f2f2f7;
+      --border-color: #e5e5ea;
+      --active-item-bg: #e5e5ea;
+      --primary-color: #007aff;
+      --danger-color: #ff3b30;
+
+      --font-size-body: 16px;
+      --font-size-title: 20px;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #000000;
+      --text-color: #ffffff;
+      --sub-text-color: #8e8e93;
+      --panel-bg: #1c1c1e;
+      --border-color: #38383a;
+      --active-item-bg: #2c2c2e;
+    }
+
+    [data-font-size="small"] {
+      --font-size-body: 14px;
+      --font-size-title: 17px;
+    }
+
+    [data-font-size="medium"] {
+      --font-size-body: 16px;
+      --font-size-title: 20px;
+    }
+
+    [data-font-size="large"] {
+      --font-size-body: 19px;
+      --font-size-title: 24px;
+    }
+
+    /* Base Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Layout Containers */
+    header {
+      height: 52px;
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-weight: 600;
+      font-size: 17px;
+    }
+
+    .app-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      transition: transform 0.25s ease;
+    }
+
+    /* 3-Pane Dimensions (Desktop) */
+    .folder-pane { width: 220px; flex-shrink: 0; background-color: var(--panel-bg); }
+    .note-list-pane { width: 280px; flex-shrink: 0; }
+    .editor-pane { flex: 1; border-right: none; }
+
+    /* Buttons & Controls */
+    button, select, input {
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background-color: var(--panel-bg);
+      color: var(--text-color);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 38px;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      color: #fff;
+      border: none;
+    }
+
+    .btn-danger {
+      background-color: var(--danger-color);
+      color: #fff;
+      border: none;
+    }
+
+    .pane-header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pane-title {
+      font-weight: bold;
+      font-size: 15px;
+    }
+
+    .list-container {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* List Items */
+    .list-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .list-item:hover, .list-item.active {
+      background-color: var(--active-item-bg);
+    }
+
+    .item-title {
+      font-size: var(--font-size-body);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .item-date {
+      font-size: 12px;
+      color: var(--sub-text-color);
+      margin-top: 4px;
+    }
+
+    /* Batch Selection Styling */
+    .batch-checkbox {
+      margin-right: 10px;
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Editor Toolbar & Inputs */
+    .editor-toolbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      background-color: var(--panel-bg);
+    }
+
+    .editor-title-input {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: var(--font-size-title);
+      font-weight: bold;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .editor-textarea {
+      flex: 1;
+      width: 100%;
+      padding: 16px;
+      font-size: var(--font-size-body);
+      border: none;
+      outline: none;
+      resize: none;
+      background: transparent;
+      color: var(--text-color);
+      line-height: 1.6;
+    }
+
+    .save-status {
+      font-size: 12px;
+      color: var(--sub-text-color);
+      margin-left: auto;
+    }
+
+    /* Replace Box UI */
+    .replace-panel {
+      padding: 10px 12px;
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .replace-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .replace-input {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-color);
+      color: var(--text-color);
+    }
+
+    /* Settings Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      background: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Mobile Back Button */
+    .mobile-back-btn {
+      display: none;
+    }
+
+    /* Responsive Handling (Mobile / iPhone) */
+    @media (max-width: 768px) {
+      .pane {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        width: 100% !important;
+        z-index: 1;
+      }
+
+      .mobile-back-btn {
+        display: inline-flex;
+      }
+
+      /* Single view navigation for narrow screens */
+      .app-container[data-view="folders"] .folder-pane { z-index: 3; }
+      .app-container[data-view="notes"] .note-list-pane { z-index: 3; }
+      .app-container[data-view="editor"] .editor-pane { z-index: 3; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="btn mobile-back-btn" id="headerBackBtn">＜ 戻る</button>
+      <div class="header-title" id="headerTitle">フォルダ一覧</div>
+    </div>
+    <button class="btn" id="openSettingsBtn">⚙️ 設定</button>
+  </header>
+
+  <!-- App Main Content -->
+  <div class="app-container" id="appContainer" data-view="folders">
+
+    <!-- 1. Folder Pane -->
+    <div class="pane folder-pane">
+      <div class="pane-header">
+        <span class="pane-title">フォルダ</span>
+        <button class="btn btn-primary" id="addFolderBtn">＋ 作成</button>
+      </div>
+      <div class="list-container" id="folderList"></div>
+    </div>
+
+    <!-- 2. Note List Pane -->
+    <div class="pane note-list-pane">
+      <div class="pane-header">
+        <span class="pane-title" id="currentFolderName">すべてのメモ</span>
+        <div style="display: flex; gap: 4px;">
+          <button class="btn" id="toggleMultiSelectBtn">選択</button>
+          <button class="btn btn-primary" id="addNoteBtn">＋ 作成</button>
+        </div>
+      </div>
+      <!-- Batch Action Bar -->
+      <div id="batchBar" style="display: none; padding: 8px 12px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); align-items: center; justify-content: space-between;">
+        <select id="targetFolderSelect" style="padding: 4px; border-radius: 4px;"></select>
+        <button class="btn btn-primary" id="moveSelectedNotesBtn">移動</button>
+      </div>
+      <div class="list-container" id="noteList"></div>
+    </div>
+
+    <!-- 3. Editor Pane -->
+    <div class="pane editor-pane">
+      <!-- Toolbar -->
+      <div class="editor-toolbar">
+        <button class="btn" id="toggleReplacePanelBtn">🔍 置換</button>
+        <button class="btn" id="duplicateNoteBtn">📋 複製</button>
+        <button class="btn btn-danger" id="deleteNoteBtn">🗑️ 削除</button>
+        <span class="save-status" id="saveStatus">保存済み</span>
+      </div>
+
+      <!-- Replace UI -->
+      <div class="replace-panel" id="replacePanel" style="display: none;">
+        <div class="replace-row">
+          <input type="text" id="findInput" class="replace-input" placeholder="検索文字列">
+          <input type="text" id="replaceInput" class="replace-input" placeholder="置換後の文字列">
+        </div>
+        <div class="replace-row" style="justify-content: space-between;">
+          <span id="matchCountText" style="font-size: 12px; color: var(--sub-text-color);">0件ヒット</span>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn" id="replaceNextBtn">1件置換</button>
+            <button class="btn btn-primary" id="replaceAllBtn">一括置換</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Note Inputs -->
+      <input type="text" class="editor-title-input" id="noteTitle" placeholder="タイトルなし">
+      <textarea class="editor-textarea" id="noteContent" placeholder="ここからメモを入力..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- Settings & Backup Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-content">
+      <h3 style="font-size: 18px;">設定 & バックアップ</h3>
+
+      <div class="form-group">
+        <label style="font-size: 14px;">テーマ</label>
+        <select id="themeSelect" class="btn">
+          <option value="light">ライト（白背景・黒文字）</option>
+          <option value="dark">ダーク（黒背景・白文字）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label style="font-size: 14px;">文字の大きさ</label>
+        <select id="fontSizeSelect" class="btn">
+          <option value="small">小</option>
+          <option value="medium">中</option>
+          <option value="large">大</option>
+        </select>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
+
+      <div class="form-group">
+        <label style="font-size: 14px; font-weight: bold;">データバックアップ</label>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" id="exportBtn" style="flex: 1;">📥 保存 (JSON)</button>
+          <button class="btn" id="importTriggerBtn" style="flex: 1;">📤 復元 (JSON)</button>
+          <input type="file" id="importFileInput" accept=".json" style="display: none;">
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="closeSettingsBtn" style="margin-top: 8px;">閉じる</button>
+    </div>
+  </div>
+
+  <!-- Application Script -->
+  <script>
+    /* ==========================================
+       1. IndexedDB Database Operations
+       ========================================== */
+    class DB {
+      static dbName = 'MemoAppDB';
+      static dbVersion = 1;
+
+      static open() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, this.dbVersion);
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('folders')) {
+              db.createObjectStore('folders', { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains('notes')) {
+              const noteStore = db.createObjectStore('notes', { keyPath: 'id' });
+              noteStore.createIndex('folderId', 'folderId', { unique: false });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      static async getAll(storeName) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(storeName, 'readonly');
+          const store = tx.objectStore(storeName);
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      static async put(storeName, item) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(storeName, 'readwrite');
+          const store = tx.objectStore(storeName);
+          const req = store.put(item);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      static async delete(storeName, id) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(storeName, 'readwrite');
+          const store = tx.objectStore(storeName);
+          const req = store.delete(id);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      }
+    }
+
+    /* ==========================================
+       2. State Management & Initialization
+       ========================================== */
+    const state = {
+      folders: [],
+      notes: [],
+      currentFolderId: null, // null means "All Notes"
+      currentNoteId: null,
+      isMultiSelectMode: false,
+      selectedNoteIds: new Set(),
+      autoSaveTimer: null,
+      view: 'folders' // 'folders' | 'notes' | 'editor' (Mobile navigation)
+    };
+
+    // DOM Elements
+    const el = {
+      appContainer: document.getElementById('appContainer'),
+      headerTitle: document.getElementById('headerTitle'),
+      headerBackBtn: document.getElementById('headerBackBtn'),
+      folderList: document.getElementById('folderList'),
+      noteList: document.getElementById('noteList'),
+      currentFolderName: document.getElementById('currentFolderName'),
+      addFolderBtn: document.getElementById('addFolderBtn'),
+      addNoteBtn: document.getElementById('addNoteBtn'),
+      toggleMultiSelectBtn: document.getElementById('toggleMultiSelectBtn'),
+      batchBar: document.getElementById('batchBar'),
+      targetFolderSelect: document.getElementById('targetFolderSelect'),
+      moveSelectedNotesBtn: document.getElementById('moveSelectedNotesBtn'),
+      noteTitle: document.getElementById('noteTitle'),
+      noteContent: document.getElementById('noteContent'),
+      saveStatus: document.getElementById('saveStatus'),
+      duplicateNoteBtn: document.getElementById('duplicateNoteBtn'),
+      deleteNoteBtn: document.getElementById('deleteNoteBtn'),
+      toggleReplacePanelBtn: document.getElementById('toggleReplacePanelBtn'),
+      replacePanel: document.getElementById('replacePanel'),
+      findInput: document.getElementById('findInput'),
+      replaceInput: document.getElementById('replaceInput'),
+      matchCountText: document.getElementById('matchCountText'),
+      replaceNextBtn: document.getElementById('replaceNextBtn'),
+      replaceAllBtn: document.getElementById('replaceAllBtn'),
+      openSettingsBtn: document.getElementById('openSettingsBtn'),
+      closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+      settingsModal: document.getElementById('settingsModal'),
+      themeSelect: document.getElementById('themeSelect'),
+      fontSizeSelect: document.getElementById('fontSizeSelect'),
+      exportBtn: document.getElementById('exportBtn'),
+      importTriggerBtn: document.getElementById('importTriggerBtn'),
+      importFileInput: document.getElementById('importFileInput')
+    };
+
+    // Start App
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadSettings();
+      await loadDataFromDB();
+      renderFolders();
+      renderNotes();
+      setupEventListeners();
+    });
+
+    /* ==========================================
+       3. Data Loading & Persistence
+       ========================================== */
+    async function loadDataFromDB() {
+      state.folders = await DB.getAll('folders');
+      state.notes = await DB.getAll('notes');
+    }
+
+    function loadSettings() {
+      const theme = localStorage.getItem('memo_theme') || 'light';
+      const fontSize = localStorage.getItem('memo_fontsize') || 'medium';
+
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.setAttribute('data-font-size', fontSize);
+
+      el.themeSelect.value = theme;
+      el.fontSizeSelect.value = fontSize;
+    }
+
+    /* ==========================================
+       4. Render Logic
+       ========================================== */
+    function renderFolders() {
+      el.folderList.innerHTML = '';
+
+      // "All Notes" item
+      const allItem = document.createElement('div');
+      allItem.className = `list-item ${state.currentFolderId === null ? 'active' : ''}`;
+      allItem.innerHTML = `<span class="item-title">📁 すべてのメモ</span>`;
+      allItem.onclick = () => selectFolder(null);
+      el.folderList.appendChild(allItem);
+
+      state.folders.forEach(folder => {
+        const item = document.createElement('div');
+        item.className = `list-item ${state.currentFolderId === folder.id ? 'active' : ''}`;
+
+        item.innerHTML = `
+          <span class="item-title">📁 ${escapeHtml(folder.name)}</span>
+          <div style="display: flex; gap: 4px;" onclick="event.stopPropagation()">
+            <button class="btn" style="padding: 2px 6px; font-size: 12px;" onclick="renameFolder('${folder.id}')">編集</button>
+            <button class="btn btn-danger" style="padding: 2px 6px; font-size: 12px;" onclick="deleteFolder('${folder.id}')">削除</button>
+          </div>
+        `;
+        item.onclick = () => selectFolder(folder.id);
+        el.folderList.appendChild(item);
+      });
+    }
+
+    function renderNotes() {
+      el.noteList.innerHTML = '';
+
+      // Filter notes
+      const filteredNotes = state.currentFolderId
+        ? state.notes.filter(n => n.folderId === state.currentFolderId)
+        : state.notes;
+
+      // Update current folder header text
+      if (state.currentFolderId === null) {
+        el.currentFolderName.textContent = "すべてのメモ";
+      } else {
+        const folder = state.folders.find(f => f.id === state.currentFolderId);
+        el.currentFolderName.textContent = folder ? folder.name : "メモ一覧";
+      }
+
+      if (filteredNotes.length === 0) {
+        el.noteList.innerHTML = `<div style="padding: 16px; color: var(--sub-text-color); font-size: 14px;">メモがありません</div>`;
+        return;
+      }
+
+      // Sort by updatedAt desc
+      filteredNotes.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      filteredNotes.forEach(note => {
+        const item = document.createElement('div');
+        item.className = `list-item ${state.currentNoteId === note.id ? 'active' : ''}`;
+
+        const isChecked = state.selectedNoteIds.has(note.id) ? 'checked' : '';
+        const checkboxHtml = state.isMultiSelectMode
+          ? `<input type="checkbox" class="batch-checkbox" ${isChecked} onclick="toggleNoteSelection('${note.id}', event)">`
+          : '';
+
+        const dateStr = new Date(note.updatedAt).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+        item.innerHTML = `
+          <div style="display: flex; align-items: center; width: 100%;">
+            ${checkboxHtml}
+            <div style="flex: 1; overflow: hidden;">
+              <div class="item-title">${escapeHtml(note.title || 'タイトルなし')}</div>
+              <div class="item-date">${dateStr}</div>
+            </div>
+          </div>
+        `;
+
+        item.onclick = () => {
+          if (state.isMultiSelectMode) {
+            toggleNoteSelection(note.id);
+          } else {
+            selectNote(note.id);
+          }
+        };
+
+        el.noteList.appendChild(item);
+      });
+    }
+
+    function loadEditor() {
+      const note = state.notes.find(n => n.id === state.currentNoteId);
+      if (!note) {
+        el.noteTitle.value = '';
+        el.noteContent.value = '';
+        el.saveStatus.textContent = '';
+        return;
+      }
+
+      el.noteTitle.value = note.title;
+      el.noteContent.value = note.content;
+      el.saveStatus.textContent = '保存済み';
+      updateMatchCount();
+    }
+
+    /* ==========================================
+       5. User Action Handlers
+       ========================================== */
+    function navigateTo(viewName) {
+      state.view = viewName;
+      el.appContainer.setAttribute('data-view', viewName);
+
+      if (viewName === 'folders') {
+        el.headerTitle.textContent = "フォルダ一覧";
+        el.headerBackBtn.style.display = "none";
+      } else if (viewName === 'notes') {
+        el.headerTitle.textContent = el.currentFolderName.textContent;
+        el.headerBackBtn.style.display = "inline-flex";
+      } else if (viewName === 'editor') {
+        const note = state.notes.find(n => n.id === state.currentNoteId);
+        el.headerTitle.textContent = note ? (note.title || "メモ編集") : "メモ編集";
+        el.headerBackBtn.style.display = "inline-flex";
+      }
+    }
+
+    function selectFolder(folderId) {
+      state.currentFolderId = folderId;
+      renderFolders();
+      renderNotes();
+      navigateTo('notes');
+    }
+
+    function selectNote(noteId) {
+      state.currentNoteId = noteId;
+      renderNotes();
+      loadEditor();
+      navigateTo('editor');
+    }
+
+    // Folder Operations
+    async function createFolder() {
+      const name = prompt("新しいフォルダ名を入力してください:");
+      if (!name || !name.trim()) return;
+
+      const newFolder = {
+        id: 'f_' + Date.now(),
+        name: name.trim(),
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await DB.put('folders', newFolder);
+      state.folders.push(newFolder);
+      renderFolders();
+    }
+
+    async function renameFolder(folderId) {
+      const folder = state.folders.find(f => f.id === folderId);
+      if (!folder) return;
+
+      const newName = prompt("フォルダ名を変更:", folder.name);
+      if (!newName || !newName.trim()) return;
+
+      folder.name = newName.trim();
+      folder.updatedAt = Date.now();
+
+      await DB.put('folders', folder);
+      renderFolders();
+      renderNotes();
+    }
+
+    async function deleteFolder(folderId) {
+      if (!confirm("フォルダを削除しますか？\n（※フォルダ内のメモは「すべてのメモ」に残ります）")) return;
+
+      await DB.delete('folders', folderId);
+      state.folders = state.folders.filter(f => f.id !== folderId);
+      if (state.currentFolderId === folderId) {
+        state.currentFolderId = null;
+      }
+      renderFolders();
+      renderNotes();
+    }
+
+    // Note Operations
+    async function createNote() {
+      const newNote = {
+        id: 'n_' + Date.now(),
+        folderId: state.currentFolderId,
+        title: '',
+        content: '',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await DB.put('notes', newNote);
+      state.notes.unshift(newNote);
+      selectNote(newNote.id);
+    }
+
+    async function duplicateNote() {
+      if (!state.currentNoteId) return;
+      const current = state.notes.find(n => n.id === state.currentNoteId);
+      if (!current) return;
+
+      const duplicated = {
+        id: 'n_' + Date.now(),
+        folderId: current.folderId,
+        title: current.title + ' (コピー)',
+        content: current.content,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await DB.put('notes', duplicated);
+      state.notes.unshift(duplicated);
+      selectNote(duplicated.id);
+    }
+
+    async function deleteCurrentNote() {
+      if (!state.currentNoteId) return;
+      if (!confirm("このメモを削除してもよろしいですか？")) return;
+
+      await DB.delete('notes', state.currentNoteId);
+      state.notes = state.notes.filter(n => n.id !== state.currentNoteId);
+      state.currentNoteId = null;
+
+      renderNotes();
+      loadEditor();
+      if (window.innerWidth <= 768) {
+        navigateTo('notes');
+      }
+    }
+
+    /* ==========================================
+       6. Auto Save Logic (Debounced)
+       ========================================== */
+    function triggerAutoSave() {
+      if (!state.currentNoteId) return;
+
+      el.saveStatus.textContent = '編集中...';
+
+      if (state.autoSaveTimer) {
+        clearTimeout(state.autoSaveTimer);
+      }
+
+      state.autoSaveTimer = setTimeout(async () => {
+        el.saveStatus.textContent = '自動保存中...';
+
+        const note = state.notes.find(n => n.id === state.currentNoteId);
+        if (note) {
+          note.title = el.noteTitle.value;
+          note.content = el.noteContent.value;
+          note.updatedAt = Date.now();
+
+          await DB.put('notes', note);
+          renderNotes();
+          el.saveStatus.textContent = '保存済み';
+        }
+      }, 800); // 800ms debounce
+    }
+
+    /* ==========================================
+       7. Batch Operations (Multi-select)
+       ========================================== */
+    function toggleMultiSelectMode() {
+      state.isMultiSelectMode = !state.isMultiSelectMode;
+      state.selectedNoteIds.clear();
+      el.toggleMultiSelectBtn.textContent = state.isMultiSelectMode ? "キャンセル" : "選択";
+      el.batchBar.style.display = state.isMultiSelectMode ? "flex" : "none";
+
+      if (state.isMultiSelectMode) {
+        updateTargetFolderDropdown();
+      }
+      renderNotes();
+    }
+
+    function toggleNoteSelection(noteId, event) {
+      if (event) event.stopPropagation();
+      if (state.selectedNoteIds.has(noteId)) {
+        state.selectedNoteIds.delete(noteId);
+      } else {
+        state.selectedNoteIds.add(noteId);
+      }
+      renderNotes();
+    }
+
+    function updateTargetFolderDropdown() {
+      el.targetFolderSelect.innerHTML = `<option value="">📁 すべてのメモ（未分類）</option>`;
+      state.folders.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = `📁 ${f.name}`;
+        el.targetFolderSelect.appendChild(opt);
+      });
+    }
+
+    async function moveSelectedNotes() {
+      if (state.selectedNoteIds.size === 0) {
+        alert("移動するメモを選択してください。");
+        return;
+      }
+
+      const targetFolderId = el.targetFolderSelect.value || null;
+
+      for (const noteId of state.selectedNoteIds) {
+        const note = state.notes.find(n => n.id === noteId);
+        if (note) {
+          note.folderId = targetFolderId;
+          note.updatedAt = Date.now();
+          await DB.put('notes', note);
+        }
+      }
+
+      alert(`${state.selectedNoteIds.size}件のメモを移動しました。`);
+      toggleMultiSelectMode();
+      renderNotes();
+    }
+
+    /* ==========================================
+       8. Find & Replace Logic
+       ========================================== */
+    function updateMatchCount() {
+      const searchStr = el.findInput.value;
+      if (!searchStr) {
+        el.matchCountText.textContent = '0件ヒット';
+        return;
+      }
+
+      const content = el.noteContent.value;
+      const regex = new RegExp(escapeRegExp(searchStr), 'g');
+      const matches = content.match(regex);
+      const count = matches ? matches.length : 0;
+      el.matchCountText.textContent = `${count}件ヒット`;
+    }
+
+    function replaceNext() {
+      const searchStr = el.findInput.value;
+      const replaceStr = el.replaceInput.value;
+      if (!searchStr) return;
+
+      const content = el.noteContent.value;
+      const index = content.indexOf(searchStr);
+
+      if (index !== -1) {
+        el.noteContent.value = content.substring(0, index) + replaceStr + content.substring(index + searchStr.length);
+        updateMatchCount();
+        triggerAutoSave();
+      }
+    }
+
+    function replaceAll() {
+      const searchStr = el.findInput.value;
+      const replaceStr = el.replaceInput.value;
+      if (!searchStr) return;
+
+      const content = el.noteContent.value;
+      const regex = new RegExp(escapeRegExp(searchStr), 'g');
+      const newContent = content.replace(regex, replaceStr);
+
+      el.noteContent.value = newContent;
+      updateMatchCount();
+      triggerAutoSave();
+    }
+
+    /* ==========================================
+       9. Data Export / Import (Backup)
+       ========================================== */
+    async function exportBackup() {
+      const folders = await DB.getAll('folders');
+      const notes = await DB.getAll('notes');
+      const backupData = {
+        exportedAt: new Date().toISOString(),
+        folders,
+        notes
+      };
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `memo_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importBackup(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (Array.isArray(data.folders) && Array.isArray(data.notes)) {
+            if (!confirm("バックアップデータを読み込んでインポートしますか？\n（同名・同IDのデータは更新されます）")) return;
+
+            for (const f of data.folders) await DB.put('folders', f);
+            for (const n of data.notes) await DB.put('notes', n);
+
+            await loadDataFromDB();
+            renderFolders();
+            renderNotes();
+            alert("データを復元・インポートしました！");
+          } else {
+            alert("無効なバックアップファイルフォーマットです。");
+          }
+        } catch (err) {
+          alert("ファイルの読み込み中にエラーが発生しました。");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    /* ==========================================
+       10. Event Listeners & Utilities
+       ========================================== */
+    function setupEventListeners() {
+      // Input event listeners for auto save
+      el.noteTitle.addEventListener('input', triggerAutoSave);
+      el.noteContent.addEventListener('input', () => {
+        triggerAutoSave();
+        updateMatchCount();
+      });
+
+      // Header Back button for Mobile
+      el.headerBackBtn.onclick = () => {
+        if (state.view === 'editor') {
+          navigateTo('notes');
+        } else if (state.view === 'notes') {
+          navigateTo('folders');
+        }
+      };
+
+      // Folder / Note Create
+      el.addFolderBtn.onclick = createFolder;
+      el.addNoteBtn.onclick = createNote;
+
+      // Duplicate / Delete Note
+      el.duplicateNoteBtn.onclick = duplicateNote;
+      el.deleteNoteBtn.onclick = deleteCurrentNote;
+
+      // Multi Select
+      el.toggleMultiSelectBtn.onclick = toggleMultiSelectMode;
+      el.moveSelectedNotesBtn.onclick = moveSelectedNotes;
+
+      // Replace Panel Toggle & Actions
+      el.toggleReplacePanelBtn.onclick = () => {
+        const isHidden = el.replacePanel.style.display === 'none';
+        el.replacePanel.style.display = isHidden ? 'flex' : 'none';
+        if (isHidden) updateMatchCount();
+      };
+      el.findInput.addEventListener('input', updateMatchCount);
+      el.replaceNextBtn.onclick = replaceNext;
+      el.replaceAllBtn.onclick = replaceAll;
+
+      // Settings Modal
+      el.openSettingsBtn.onclick = () => el.settingsModal.classList.add('active');
+      el.closeSettingsBtn.onclick = () => el.settingsModal.classList.remove('active');
+
+      el.themeSelect.onchange = (e) => {
+        const val = e.target.value;
+        document.documentElement.setAttribute('data-theme', val);
+        localStorage.setItem('memo_theme', val);
+      };
+
+      el.fontSizeSelect.onchange = (e) => {
+        const val = e.target.value;
+        document.documentElement.setAttribute('data-font-size', val);
+        localStorage.setItem('memo_fontsize', val);
+      };
+
+      // Backup Actions
+      el.exportBtn.onclick = exportBackup;
+      el.importTriggerBtn.onclick = () => el.importFileInput.click();
+      el.importFileInput.onchange = importBackup;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+  </script>
+</body>
+</html>
