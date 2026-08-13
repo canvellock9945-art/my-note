@@ -3,32 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>スマートメモ帳</title>
+  <title>🐰 スマートメモ帳</title>
   <style>
     /* ==========================================
        CSS Variables & Theme Setup
        ========================================== */
     :root {
-      --bg-color: #ffffff;
-      --text-color: #1c1c1e;
-      --sub-text-color: #8e8e93;
-      --panel-bg: #f2f2f7;
-      --border-color: #e5e5ea;
-      --active-item-bg: #e5e5ea;
-      --primary-color: #007aff;
-      --danger-color: #ff3b30;
+      --bg-color: #fff5f8;
+      --text-color: #333333;
+      --sub-text-color: #a0668a;
+      --panel-bg: #ffe6f0;
+      --border-color: #ffc9db;
+      --active-item-bg: #ffc9db;
+      --primary-color: #ff85b3;
+      --danger-color: #ff6b9d;
 
       --font-size-body: 16px;
       --font-size-title: 20px;
     }
 
     [data-theme="dark"] {
-      --bg-color: #000000;
-      --text-color: #ffffff;
-      --sub-text-color: #8e8e93;
-      --panel-bg: #1c1c1e;
-      --border-color: #38383a;
-      --active-item-bg: #2c2c2e;
+      --bg-color: #2d1b2e;
+      --text-color: #fff0f5;
+      --sub-text-color: #d8a0c8;
+      --panel-bg: #3d2a3e;
+      --border-color: #8b5a7e;
+      --active-item-bg: #5d3a60;
     }
 
     [data-font-size="small"] {
@@ -55,7 +55,7 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: "Rounded M+ 1c", "M PLUS Rounded 1c", "Segoe UI", "Apple Color Emoji", -apple-system, BlinkMacSystemFont, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-color);
       height: 100vh;
@@ -79,6 +79,11 @@
     .header-title {
       font-weight: 600;
       font-size: 17px;
+    }
+
+    .header-title::before {
+      content: '🐰 ';
+      margin-right: 4px;
     }
 
     .app-container {
@@ -109,7 +114,7 @@
 
     .btn {
       padding: 8px 12px;
-      border-radius: 8px;
+      border-radius: 16px;
       border: 1px solid var(--border-color);
       background-color: var(--panel-bg);
       color: var(--text-color);
@@ -118,18 +123,37 @@
       align-items: center;
       gap: 6px;
       min-height: 38px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 107, 157, 0.2);
+      background-color: var(--border-color);
     }
 
     .btn-primary {
       background-color: var(--primary-color);
       color: #fff;
       border: none;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background-color: #ff6b9d;
+      box-shadow: 0 4px 16px rgba(255, 107, 157, 0.3);
     }
 
     .btn-danger {
       background-color: var(--danger-color);
       color: #fff;
       border: none;
+      font-weight: 600;
+    }
+
+    .btn-danger:hover {
+      background-color: #ff5a8a;
+      box-shadow: 0 4px 16px rgba(255, 107, 157, 0.3);
     }
 
     .pane-header {
@@ -146,6 +170,16 @@
       font-size: 15px;
     }
 
+    .folder-pane .pane-title::before {
+      content: '📁 ';
+      margin-right: 4px;
+    }
+
+    .note-list-pane .pane-title::before {
+      content: '📝 ';
+      margin-right: 4px;
+    }
+
     .list-container {
       flex: 1;
       overflow-y: auto;
@@ -159,10 +193,13 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      transition: all 0.15s ease;
     }
 
     .list-item:hover, .list-item.active {
       background-color: var(--active-item-bg);
+      border-left: 4px solid var(--primary-color);
+      padding-left: 12px;
     }
 
     .item-title {
@@ -206,7 +243,13 @@
       outline: none;
       background: transparent;
       color: var(--text-color);
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .editor-title-input:focus {
+      border-bottom-color: var(--primary-color);
+      background: rgba(255, 133, 179, 0.1);
     }
 
     .editor-textarea {
@@ -220,6 +263,11 @@
       background: transparent;
       color: var(--text-color);
       line-height: 1.6;
+      transition: all 0.2s ease;
+    }
+
+    .editor-textarea:focus {
+      background: rgba(255, 133, 179, 0.05);
     }
 
     .save-status {
@@ -247,17 +295,24 @@
     .replace-input {
       flex: 1;
       padding: 6px 10px;
-      border-radius: 6px;
+      border-radius: 10px;
       border: 1px solid var(--border-color);
       background: var(--bg-color);
       color: var(--text-color);
+      transition: all 0.2s ease;
+    }
+
+    .replace-input:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 8px rgba(255, 133, 179, 0.3);
+      outline: none;
     }
 
     /* Settings Modal */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(255, 107, 157, 0.3);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -265,6 +320,7 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s;
+      backdrop-filter: blur(2px);
     }
 
     .modal-overlay.active {
@@ -276,12 +332,19 @@
       background: var(--bg-color);
       color: var(--text-color);
       padding: 20px;
-      border-radius: 12px;
+      border-radius: 20px;
       width: 90%;
       max-width: 380px;
       display: flex;
       flex-direction: column;
       gap: 16px;
+      box-shadow: 0 8px 32px rgba(255, 107, 157, 0.25);
+      border: 1px solid var(--border-color);
+    }
+
+    .modal-content h3::before {
+      content: '🐰 ';
+      margin-right: 4px;
     }
 
     .form-group {
