@@ -534,61 +534,269 @@
   <!-- Application Script -->
   <script>
     /* ==========================================
-       1. IndexedDB Database Operations
+       1. Hybrid Storage (IndexedDB + LocalStorage + Memory)
        ========================================== */
     class DB {
       static dbName = 'MemoAppDB';
       static dbVersion = 1;
+      static storageMode = null; // 'indexeddb' | 'localstorage' | 'memory'
+      static memoryStorage = { folders: [], notes: [] }; // メモリバックアップ
 
-      static open() {
-        return new Promise((resolve, reject) => {
+      static async detectStorageMode() {
+        // IndexedDB を試す
+        try {
+          console.log('Attempting IndexedDB...');
           const request = indexedDB.open(this.dbName, this.dbVersion);
-          request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains('folders')) {
-              db.createObjectStore('folders', { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains('notes')) {
-              const noteStore = db.createObjectStore('notes', { keyPath: 'id' });
-              noteStore.createIndex('folderId', 'folderId', { unique: false });
-            }
-          };
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
+          return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              resolve('indexeddb-timeout');
+            }, 2000);
+
+            request.onsuccess = () => {
+              clearTimeout(timeout);
+              request.result.close();
+              console.log('✓ IndexedDB available');
+              this.storageMode = 'indexeddb';
+              resolve('indexeddb');
+            };
+
+            request.onerror = () => {
+              clearTimeout(timeout);
+              console.warn('✗ IndexedDB unavailable:', request.error);
+              resolve('indexeddb-error');
+            };
+
+            request.onblocked = () => {
+              clearTimeout(timeout);
+              console.warn('✗ IndexedDB blocked');
+              resolve('indexeddb-blocked');
+            };
+          });
+        } catch (err) {
+          console.warn('✗ IndexedDB not supported:', err.message);
+          return 'indexeddb-exception';
+        }
+      }
+
+      static async open() {
+        // ストレージモードが決定されていなければ検出
+        if (!this.storageMode) {
+          const mode = await this.detectStorageMode();
+          if (mode === 'indexeddb') {
+            // IndexedDB の初期化に進む
+          } else {
+            // localStorage にフォールバック
+            this.storageMode = 'localstorage';
+            console.log('📦 Switched to localStorage mode');
+            return null; // localStorage では db オブジェクトを返さない
+          }
+        }
+
+        if (this.storageMode !== 'indexeddb') {
+          return null;
+        }
+
+        return new Promise((resolve, reject) => {
+          try {
+            const request = indexedDB.open(this.dbName, this.dbVersion);
+
+            request.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains('folders')) {
+                db.createObjectStore('folders', { keyPath: 'id' });
+              }
+              if (!db.objectStoreNames.contains('notes')) {
+                const noteStore = db.createObjectStore('notes', { keyPath: 'id' });
+                noteStore.createIndex('folderId', 'folderId', { unique: false });
+              }
+            };
+
+            request.onsuccess = () => {
+              const db = request.result;
+              db.onversionchange = () => {
+                db.close();
+              };
+              resolve(db);
+            };
+
+            request.onerror = () => {
+              console.error('IndexedDB open error:', request.error);
+              reject(new Error(`IndexedDB error: ${request.error}`));
+            };
+          } catch (err) {
+            console.error('IndexedDB open exception:', err);
+            reject(err);
+          }
         });
       }
 
       static async getAll(storeName) {
-        const db = await this.open();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(storeName, 'readonly');
-          const store = tx.objectStore(storeName);
-          const req = store.getAll();
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
+        // localStorage モードの場合
+        if (this.storageMode === 'localstorage') {
+          try {
+            const key = `memo_${storeName}`;
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : [];
+          } catch (err) {
+            console.error('localStorage getAll error:', err);
+            return this.memoryStorage[storeName] || [];
+          }
+        }
+
+        // IndexedDB モード
+        try {
+          const db = await this.open();
+          return new Promise((resolve, reject) => {
+            try {
+              const tx = db.transaction(storeName, 'readonly');
+              const store = tx.objectStore(storeName);
+              const req = store.getAll();
+
+              req.onsuccess = () => {
+                const result = req.result;
+                // メモリバックアップも更新
+                this.memoryStorage[storeName] = result;
+                resolve(result);
+              };
+
+              req.onerror = () => {
+                console.error('getAll request error:', req.error);
+                reject(new Error(`getAll error: ${req.error}`));
+              };
+
+              tx.onerror = () => {
+                console.error('getAll transaction error:', tx.error);
+                reject(new Error(`Transaction error: ${tx.error}`));
+              };
+            } catch (err) {
+              console.error('getAll exception:', err);
+              reject(err);
+            }
+          });
+        } catch (err) {
+          console.error('DB.getAll error:', err);
+          // メモリまたは localStorage からリカバリ
+          return this.memoryStorage[storeName] || [];
+        }
       }
 
       static async put(storeName, item) {
-        const db = await this.open();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(storeName, 'readwrite');
-          const store = tx.objectStore(storeName);
-          const req = store.put(item);
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
+        // メモリバックアップに保存
+        if (!this.memoryStorage[storeName]) {
+          this.memoryStorage[storeName] = [];
+        }
+        const idx = this.memoryStorage[storeName].findIndex(i => i.id === item.id);
+        if (idx >= 0) {
+          this.memoryStorage[storeName][idx] = item;
+        } else {
+          this.memoryStorage[storeName].push(item);
+        }
+
+        // localStorage モードの場合
+        if (this.storageMode === 'localstorage') {
+          try {
+            const key = `memo_${storeName}`;
+            const data = this.memoryStorage[storeName];
+            localStorage.setItem(key, JSON.stringify(data));
+            return item.id;
+          } catch (err) {
+            console.error('localStorage put error:', err);
+            throw new Error('localStorage storage quota exceeded or unavailable');
+          }
+        }
+
+        // IndexedDB モード
+        try {
+          const db = await this.open();
+          return new Promise((resolve, reject) => {
+            try {
+              const tx = db.transaction(storeName, 'readwrite');
+              const store = tx.objectStore(storeName);
+              const req = store.put(item);
+
+              req.onsuccess = () => {
+                resolve(req.result);
+              };
+
+              req.onerror = () => {
+                console.error('put request error:', req.error);
+                reject(new Error(`put error: ${req.error}`));
+              };
+
+              tx.onerror = () => {
+                console.error('put transaction error:', tx.error);
+                reject(new Error(`Transaction error: ${tx.error}`));
+              };
+
+              tx.onabort = () => {
+                console.error('put transaction aborted');
+                reject(new Error('Transaction aborted'));
+              };
+            } catch (err) {
+              console.error('put exception:', err);
+              reject(err);
+            }
+          });
+        } catch (err) {
+          console.error('DB.put error:', err);
+          throw err;
+        }
       }
 
       static async delete(storeName, id) {
-        const db = await this.open();
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction(storeName, 'readwrite');
-          const store = tx.objectStore(storeName);
-          const req = store.delete(id);
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        });
+        // メモリバックアップから削除
+        if (this.memoryStorage[storeName]) {
+          this.memoryStorage[storeName] = this.memoryStorage[storeName].filter(i => i.id !== id);
+        }
+
+        // localStorage モードの場合
+        if (this.storageMode === 'localstorage') {
+          try {
+            const key = `memo_${storeName}`;
+            localStorage.setItem(key, JSON.stringify(this.memoryStorage[storeName]));
+            return;
+          } catch (err) {
+            console.error('localStorage delete error:', err);
+            throw err;
+          }
+        }
+
+        // IndexedDB モード
+        try {
+          const db = await this.open();
+          return new Promise((resolve, reject) => {
+            try {
+              const tx = db.transaction(storeName, 'readwrite');
+              const store = tx.objectStore(storeName);
+              const req = store.delete(id);
+
+              req.onsuccess = () => {
+                resolve();
+              };
+
+              req.onerror = () => {
+                console.error('delete request error:', req.error);
+                reject(new Error(`delete error: ${req.error}`));
+              };
+
+              tx.onerror = () => {
+                console.error('delete transaction error:', tx.error);
+                reject(new Error(`Transaction error: ${tx.error}`));
+              };
+
+              tx.onabort = () => {
+                console.error('delete transaction aborted');
+                reject(new Error('Transaction aborted'));
+              };
+            } catch (err) {
+              console.error('delete exception:', err);
+              reject(err);
+            }
+          });
+        } catch (err) {
+          console.error('DB.delete error:', err);
+          throw err;
+        }
       }
     }
 
@@ -644,30 +852,85 @@
 
     // Start App
     window.addEventListener('DOMContentLoaded', async () => {
-      loadSettings();
-      await loadDataFromDB();
-      renderFolders();
-      renderNotes();
-      setupEventListeners();
+      try {
+        console.log('=== App Initialization ===');
+        console.log('IndexedDB available:', !!window.indexedDB);
+        console.log('LocalStorage available:', !!window.localStorage);
+        
+        // ストレージモードを検出
+        console.log('Detecting storage mode...');
+        await DB.detectStorageMode();
+        
+        if (!DB.storageMode) {
+          DB.storageMode = 'localstorage';
+          console.log('📦 Storage mode: localStorage');
+        } else {
+          console.log(`📦 Storage mode: ${DB.storageMode}`);
+        }
+        
+        loadSettings();
+        
+        console.log('Loading data from storage...');
+        await loadDataFromDB();
+        
+        console.log('Rendering UI...');
+        renderFolders();
+        renderNotes();
+        setupEventListeners();
+        
+        console.log('✅ App initialized successfully');
+        console.log(`Loaded ${state.folders.length} folders, ${state.notes.length} notes`);
+      } catch (error) {
+        console.error('❌ App initialization error:', error);
+        console.error('Stack:', error.stack);
+        alert('⚠️ アプリの初期化に失敗しました。\n\n詳細: ' + error.message + '\n\nブラウザのコンソールを確認してください。');
+      }
     });
 
     /* ==========================================
        3. Data Loading & Persistence
        ========================================== */
     async function loadDataFromDB() {
-      state.folders = await DB.getAll('folders');
-      state.notes = await DB.getAll('notes');
+      try {
+        console.log(`Reading from ${DB.storageMode}...`);
+        state.folders = await DB.getAll('folders');
+        console.log(`✓ Loaded ${state.folders.length} folders`);
+        
+        state.notes = await DB.getAll('notes');
+        console.log(`✓ Loaded ${state.notes.length} notes`);
+      } catch (error) {
+        console.error('❌ Load data error:', error);
+        console.error('This might be due to:');
+        console.error('- Private/Incognito browsing mode');
+        console.error('- IndexedDB is disabled in browser settings');
+        console.error('- Insufficient storage quota');
+        console.error('- Browser does not support IndexedDB');
+        
+        // メモリバックアップから復帰
+        state.folders = DB.memoryStorage.folders || [];
+        state.notes = DB.memoryStorage.notes || [];
+        
+        if (state.folders.length === 0 && state.notes.length === 0) {
+          console.log('⚠️ No data available in memory backup');
+        }
+      }
     }
 
     function loadSettings() {
-      const theme = localStorage.getItem('memo_theme') || 'light';
-      const fontSize = localStorage.getItem('memo_fontsize') || 'medium';
+      try {
+        const theme = localStorage.getItem('memo_theme') || 'light';
+        const fontSize = localStorage.getItem('memo_fontsize') || 'medium';
 
-      document.documentElement.setAttribute('data-theme', theme);
-      document.documentElement.setAttribute('data-font-size', fontSize);
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-font-size', fontSize);
 
-      el.themeSelect.value = theme;
-      el.fontSizeSelect.value = fontSize;
+        el.themeSelect.value = theme;
+        el.fontSizeSelect.value = fontSize;
+        
+        console.log(`✓ Settings loaded (theme: ${theme}, size: ${fontSize})`);
+      } catch (error) {
+        console.error('Load settings error:', error);
+      }
     }
 
     /* ==========================================
@@ -807,95 +1070,160 @@
 
     // Folder Operations
     async function createFolder() {
-      const name = prompt("新しいフォルダ名を入力してください:");
-      if (!name || !name.trim()) return;
+      try {
+        const name = prompt("新しいフォルダ名を入力してください:");
+        if (!name || !name.trim()) return;
 
-      const newFolder = {
-        id: 'f_' + Date.now(),
-        name: name.trim(),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
+        const newFolder = {
+          id: 'f_' + Date.now(),
+          name: name.trim(),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
 
-      await DB.put('folders', newFolder);
-      state.folders.push(newFolder);
-      renderFolders();
+        console.log('Creating folder:', newFolder.id, newFolder.name);
+        await DB.put('folders', newFolder);
+        console.log('✓ Folder created in DB');
+        
+        state.folders.push(newFolder);
+        console.log('✓ Folder added to state');
+        
+        renderFolders();
+      } catch (error) {
+        console.error('❌ Create folder error:', error);
+        alert('❌ フォルダの作成に失敗しました。\n\nエラー: ' + error.message);
+      }
     }
 
     async function renameFolder(folderId) {
-      const folder = state.folders.find(f => f.id === folderId);
-      if (!folder) return;
+      try {
+        const folder = state.folders.find(f => f.id === folderId);
+        if (!folder) {
+          throw new Error('Folder not found');
+        }
 
-      const newName = prompt("フォルダ名を変更:", folder.name);
-      if (!newName || !newName.trim()) return;
+        const newName = prompt("フォルダ名を変更:", folder.name);
+        if (!newName || !newName.trim()) return;
 
-      folder.name = newName.trim();
-      folder.updatedAt = Date.now();
+        folder.name = newName.trim();
+        folder.updatedAt = Date.now();
 
-      await DB.put('folders', folder);
-      renderFolders();
-      renderNotes();
+        console.log('Renaming folder:', folderId, '→', newName);
+        await DB.put('folders', folder);
+        console.log('✓ Folder renamed in DB');
+        
+        renderFolders();
+        renderNotes();
+      } catch (error) {
+        console.error('❌ Rename folder error:', error);
+        alert('❌ フォルダ名の変更に失敗しました。\n\nエラー: ' + error.message);
+      }
     }
 
     async function deleteFolder(folderId) {
-      if (!confirm("フォルダを削除しますか？\n（※フォルダ内のメモは「すべてのメモ」に残ります）")) return;
+      try {
+        if (!confirm("フォルダを削除しますか？\n（※フォルダ内のメモは「すべてのメモ」に残ります）")) return;
 
-      await DB.delete('folders', folderId);
-      state.folders = state.folders.filter(f => f.id !== folderId);
-      if (state.currentFolderId === folderId) {
-        state.currentFolderId = null;
+        console.log('Deleting folder:', folderId);
+        await DB.delete('folders', folderId);
+        console.log('✓ Folder deleted from DB');
+        
+        state.folders = state.folders.filter(f => f.id !== folderId);
+        if (state.currentFolderId === folderId) {
+          state.currentFolderId = null;
+        }
+        renderFolders();
+        renderNotes();
+      } catch (error) {
+        console.error('❌ Delete folder error:', error);
+        alert('❌ フォルダの削除に失敗しました。\n\nエラー: ' + error.message);
       }
-      renderFolders();
-      renderNotes();
     }
 
     // Note Operations
     async function createNote() {
-      const newNote = {
-        id: 'n_' + Date.now(),
-        folderId: state.currentFolderId,
-        title: '',
-        content: '',
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
+      try {
+        const newNote = {
+          id: 'n_' + Date.now(),
+          folderId: state.currentFolderId,
+          title: '',
+          content: '',
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
 
-      await DB.put('notes', newNote);
-      state.notes.unshift(newNote);
-      selectNote(newNote.id);
+        console.log('Creating note:', newNote.id);
+        await DB.put('notes', newNote);
+        console.log('✓ Note created in DB');
+        
+        state.notes.unshift(newNote);
+        console.log('✓ Note added to state');
+        
+        selectNote(newNote.id);
+      } catch (error) {
+        console.error('❌ Create note error:', error);
+        alert('❌ 新しいメモの作成に失敗しました。\n\nエラー: ' + error.message);
+      }
     }
 
     async function duplicateNote() {
-      if (!state.currentNoteId) return;
-      const current = state.notes.find(n => n.id === state.currentNoteId);
-      if (!current) return;
+      try {
+        if (!state.currentNoteId) {
+          throw new Error('No note selected to duplicate');
+        }
+        
+        const current = state.notes.find(n => n.id === state.currentNoteId);
+        if (!current) {
+          throw new Error('Current note not found in state');
+        }
 
-      const duplicated = {
-        id: 'n_' + Date.now(),
-        folderId: current.folderId,
-        title: current.title + ' (コピー)',
-        content: current.content,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
+        const duplicated = {
+          id: 'n_' + Date.now(),
+          folderId: current.folderId,
+          title: current.title + ' (コピー)',
+          content: current.content,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
 
-      await DB.put('notes', duplicated);
-      state.notes.unshift(duplicated);
-      selectNote(duplicated.id);
+        console.log('Duplicating note:', duplicated.id);
+        await DB.put('notes', duplicated);
+        console.log('✓ Note duplicated in DB');
+        
+        state.notes.unshift(duplicated);
+        console.log('✓ Duplicated note added to state');
+        
+        selectNote(duplicated.id);
+      } catch (error) {
+        console.error('❌ Duplicate note error:', error);
+        alert('❌ メモの複製に失敗しました。\n\nエラー: ' + error.message);
+      }
     }
 
     async function deleteCurrentNote() {
-      if (!state.currentNoteId) return;
-      if (!confirm("このメモを削除してもよろしいですか？")) return;
+      try {
+        if (!state.currentNoteId) {
+          throw new Error('No note selected to delete');
+        }
+        
+        if (!confirm("このメモを削除してもよろしいですか？")) return;
 
-      await DB.delete('notes', state.currentNoteId);
-      state.notes = state.notes.filter(n => n.id !== state.currentNoteId);
-      state.currentNoteId = null;
+        console.log('Deleting note:', state.currentNoteId);
+        await DB.delete('notes', state.currentNoteId);
+        console.log('✓ Note deleted from DB');
+        
+        state.notes = state.notes.filter(n => n.id !== state.currentNoteId);
+        state.currentNoteId = null;
 
-      renderNotes();
-      loadEditor();
-      if (window.innerWidth <= 768) {
-        navigateTo('notes');
+        renderNotes();
+        loadEditor();
+        if (window.innerWidth <= 768) {
+          navigateTo('notes');
+        }
+        console.log('✓ UI updated after note deletion');
+      } catch (error) {
+        console.error('❌ Delete note error:', error);
+        alert('❌ メモの削除に失敗しました。\n\nエラー: ' + error.message);
       }
     }
 
@@ -912,17 +1240,23 @@
       }
 
       state.autoSaveTimer = setTimeout(async () => {
-        el.saveStatus.textContent = '自動保存中...';
+        try {
+          el.saveStatus.textContent = '自動保存中...';
 
-        const note = state.notes.find(n => n.id === state.currentNoteId);
-        if (note) {
-          note.title = el.noteTitle.value;
-          note.content = el.noteContent.value;
-          note.updatedAt = Date.now();
+          const note = state.notes.find(n => n.id === state.currentNoteId);
+          if (note) {
+            note.title = el.noteTitle.value;
+            note.content = el.noteContent.value;
+            note.updatedAt = Date.now();
 
-          await DB.put('notes', note);
-          renderNotes();
-          el.saveStatus.textContent = '保存済み';
+            await DB.put('notes', note);
+            renderNotes();
+            el.saveStatus.textContent = '保存済み';
+          }
+        } catch (error) {
+          console.error('Auto save error:', error);
+          el.saveStatus.textContent = '❌ 保存失敗';
+          alert('メモの保存に失敗しました。ブラウザのコンソールを確認してください。');
         }
       }, 800); // 800ms debounce
     }
@@ -963,25 +1297,30 @@
     }
 
     async function moveSelectedNotes() {
-      if (state.selectedNoteIds.size === 0) {
-        alert("移動するメモを選択してください。");
-        return;
-      }
-
-      const targetFolderId = el.targetFolderSelect.value || null;
-
-      for (const noteId of state.selectedNoteIds) {
-        const note = state.notes.find(n => n.id === noteId);
-        if (note) {
-          note.folderId = targetFolderId;
-          note.updatedAt = Date.now();
-          await DB.put('notes', note);
+      try {
+        if (state.selectedNoteIds.size === 0) {
+          alert("移動するメモを選択してください。");
+          return;
         }
-      }
 
-      alert(`${state.selectedNoteIds.size}件のメモを移動しました。`);
-      toggleMultiSelectMode();
-      renderNotes();
+        const targetFolderId = el.targetFolderSelect.value || null;
+
+        for (const noteId of state.selectedNoteIds) {
+          const note = state.notes.find(n => n.id === noteId);
+          if (note) {
+            note.folderId = targetFolderId;
+            note.updatedAt = Date.now();
+            await DB.put('notes', note);
+          }
+        }
+
+        alert(`${state.selectedNoteIds.size}件のメモを移動しました。`);
+        toggleMultiSelectMode();
+        renderNotes();
+      } catch (error) {
+        console.error('Move notes error:', error);
+        alert('メモの移動に失敗しました。');
+      }
     }
 
     /* ==========================================
@@ -1034,23 +1373,40 @@
        9. Data Export / Import (Backup)
        ========================================== */
     async function exportBackup() {
-      const folders = await DB.getAll('folders');
-      const notes = await DB.getAll('notes');
-      const backupData = {
-        exportedAt: new Date().toISOString(),
-        folders,
-        notes
-      };
+      try {
+        let folders, notes;
+        
+        if (DB.storageMode === 'localstorage') {
+          // localStorage から直接取得
+          folders = state.folders;
+          notes = state.notes;
+        } else {
+          // IndexedDB から取得
+          folders = await DB.getAll('folders');
+          notes = await DB.getAll('notes');
+        }
 
-      const jsonStr = JSON.stringify(backupData, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+        const backupData = {
+          exportedAt: new Date().toISOString(),
+          storageMode: DB.storageMode,
+          folders,
+          notes
+        };
 
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `memo_backup_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+        const jsonStr = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `memo_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        console.log('✓ Backup exported successfully');
+      } catch (error) {
+        console.error('Export backup error:', error);
+        alert('❌ バックアップの保存に失敗しました。\n\nエラー: ' + error.message);
+      }
     }
 
     function importBackup(e) {
@@ -1064,18 +1420,26 @@
           if (Array.isArray(data.folders) && Array.isArray(data.notes)) {
             if (!confirm("バックアップデータを読み込んでインポートしますか？\n（同名・同IDのデータは更新されます）")) return;
 
-            for (const f of data.folders) await DB.put('folders', f);
-            for (const n of data.notes) await DB.put('notes', n);
+            console.log(`Importing ${data.folders.length} folders and ${data.notes.length} notes...`);
+            
+            for (const f of data.folders) {
+              await DB.put('folders', f);
+            }
+            for (const n of data.notes) {
+              await DB.put('notes', n);
+            }
 
             await loadDataFromDB();
             renderFolders();
             renderNotes();
-            alert("データを復元・インポートしました！");
+            alert("✅ データを復元・インポートしました！");
+            console.log('✓ Backup imported successfully');
           } else {
-            alert("無効なバックアップファイルフォーマットです。");
+            alert("❌ 無効なバックアップファイルフォーマットです。");
           }
         } catch (err) {
-          alert("ファイルの読み込み中にエラーが発生しました。");
+          console.error('Import backup error:', err);
+          alert("❌ ファイルの読み込み中にエラーが発生しました。\n\nエラー: " + err.message);
         }
       };
       reader.readAsText(file);
