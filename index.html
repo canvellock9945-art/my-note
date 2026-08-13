@@ -3,32 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>スマートメモ帳</title>
+  <title>🐰 ウサギのメモ帳</title>
   <style>
-    /* ==========================================
+    @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600&display=swap');
        CSS Variables & Theme Setup
        ========================================== */
     :root {
-      --bg-color: #ffffff;
-      --text-color: #1c1c1e;
-      --sub-text-color: #8e8e93;
-      --panel-bg: #f2f2f7;
-      --border-color: #e5e5ea;
-      --active-item-bg: #e5e5ea;
-      --primary-color: #007aff;
-      --danger-color: #ff3b30;
+      --bg-color: #faf8fc;
+      --text-color: #5a5a5a;
+      --sub-text-color: #a08fab;
+      --panel-bg: #f5f1f9;
+      --border-color: #e8d9ed;
+      --active-item-bg: #f0dff8;
+      --primary-color: #d8a0c8;
+      --danger-color: #e8708a;
 
       --font-size-body: 16px;
       --font-size-title: 20px;
     }
 
     [data-theme="dark"] {
-      --bg-color: #000000;
-      --text-color: #ffffff;
-      --sub-text-color: #8e8e93;
-      --panel-bg: #1c1c1e;
-      --border-color: #38383a;
-      --active-item-bg: #2c2c2e;
+      --bg-color: #3a2a3e;
+      --text-color: #f5f0fa;
+      --sub-text-color: #d8a0c8;
+      --panel-bg: #4a3a4e;
+      --border-color: #8b6a9e;
+      --active-item-bg: #6a4a7e;
     }
 
     [data-font-size="small"] {
@@ -55,8 +55,11 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(216, 160, 200, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 90% 80%, rgba(216, 160, 200, 0.06) 0%, transparent 50%);
       color: var(--text-color);
       height: 100vh;
       display: flex;
@@ -81,6 +84,12 @@
       font-size: 17px;
     }
 
+    .header-title::before {
+      content: '🐰 🐇 ';
+      margin-right: 6px;
+      font-size: 18px;
+    }
+
     .app-container {
       display: flex;
       flex: 1;
@@ -96,6 +105,21 @@
       transition: transform 0.25s ease;
     }
 
+    .pane::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -30px;
+      font-size: 60px;
+      opacity: 0.03;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .folder-pane::before { content: '🐰'; right: -20px; }
+    .note-list-pane::before { content: '🐇'; right: -20px; }
+    .editor-pane::before { content: '🐰'; right: -25px; }
+
     /* 3-Pane Dimensions (Desktop) */
     .folder-pane { width: 220px; flex-shrink: 0; background-color: var(--panel-bg); }
     .note-list-pane { width: 280px; flex-shrink: 0; }
@@ -109,7 +133,7 @@
 
     .btn {
       padding: 8px 12px;
-      border-radius: 8px;
+      border-radius: 16px;
       border: 1px solid var(--border-color);
       background-color: var(--panel-bg);
       color: var(--text-color);
@@ -118,18 +142,38 @@
       align-items: center;
       gap: 6px;
       min-height: 38px;
+      transition: all 0.2s ease;
+      font-weight: 500;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(216, 160, 200, 0.15);
+      background-color: var(--border-color);
     }
 
     .btn-primary {
       background-color: var(--primary-color);
       color: #fff;
       border: none;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background-color: #c77fb5;
+      box-shadow: 0 2px 12px rgba(216, 160, 200, 0.25);
     }
 
     .btn-danger {
       background-color: var(--danger-color);
       color: #fff;
       border: none;
+      font-weight: 600;
+    }
+
+    .btn-danger:hover {
+      background-color: #d85579;
+      box-shadow: 0 2px 12px rgba(232, 112, 138, 0.25);
     }
 
     .pane-header {
@@ -146,6 +190,18 @@
       font-size: 15px;
     }
 
+    .folder-pane .pane-title::before {
+      content: '🐰 ';
+      margin-right: 6px;
+      font-size: 16px;
+    }
+
+    .note-list-pane .pane-title::before {
+      content: '🐇 ';
+      margin-right: 6px;
+      font-size: 16px;
+    }
+
     .list-container {
       flex: 1;
       overflow-y: auto;
@@ -159,10 +215,26 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .list-item::before {
+      content: '🐰';
+      opacity: 0;
+      position: absolute;
+      left: 2px;
+      font-size: 14px;
+      transition: opacity 0.2s ease;
     }
 
     .list-item:hover, .list-item.active {
       background-color: var(--active-item-bg);
+      padding-left: 24px;
+    }
+
+    .list-item:hover::before, .list-item.active::before {
+      opacity: 1;
     }
 
     .item-title {
@@ -206,7 +278,17 @@
       outline: none;
       background: transparent;
       color: var(--text-color);
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .editor-title-input:focus {
+      border-bottom-color: var(--primary-color);
+      background: rgba(216, 160, 200, 0.08);
+    }
+
+    .editor-title-input::placeholder {
+      color: rgba(90, 90, 90, 0.4);
     }
 
     .editor-textarea {
@@ -220,6 +302,15 @@
       background: transparent;
       color: var(--text-color);
       line-height: 1.6;
+      transition: all 0.2s ease;
+    }
+
+    .editor-textarea:focus {
+      background: rgba(216, 160, 200, 0.05);
+    }
+
+    .editor-textarea::placeholder {
+      color: rgba(90, 90, 90, 0.4);
     }
 
     .save-status {
@@ -247,17 +338,24 @@
     .replace-input {
       flex: 1;
       padding: 6px 10px;
-      border-radius: 6px;
+      border-radius: 10px;
       border: 1px solid var(--border-color);
       background: var(--bg-color);
       color: var(--text-color);
+      transition: all 0.2s ease;
+    }
+
+    .replace-input:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 8px rgba(216, 160, 200, 0.25);
+      outline: none;
     }
 
     /* Settings Modal */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(216, 160, 200, 0.25);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -265,6 +363,7 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s;
+      backdrop-filter: blur(3px);
     }
 
     .modal-overlay.active {
@@ -276,12 +375,20 @@
       background: var(--bg-color);
       color: var(--text-color);
       padding: 20px;
-      border-radius: 12px;
+      border-radius: 20px;
       width: 90%;
       max-width: 380px;
       display: flex;
       flex-direction: column;
       gap: 16px;
+      box-shadow: 0 8px 32px rgba(216, 160, 200, 0.2);
+      border: 1px solid var(--border-color);
+    }
+
+    .modal-content h3::before {
+      content: '🐰 🐇 ';
+      margin-right: 4px;
+      font-size: 18px;
     }
 
     .form-group {
@@ -323,7 +430,7 @@
       <button class="btn mobile-back-btn" id="headerBackBtn">＜ 戻る</button>
       <div class="header-title" id="headerTitle">フォルダ一覧</div>
     </div>
-    <button class="btn" id="openSettingsBtn">⚙️ 設定</button>
+    <button class="btn" id="openSettingsBtn">🐰 ⚙️</button>
   </header>
 
   <!-- App Main Content -->
@@ -333,7 +440,7 @@
     <div class="pane folder-pane">
       <div class="pane-header">
         <span class="pane-title">フォルダ</span>
-        <button class="btn btn-primary" id="addFolderBtn">＋ 作成</button>
+        <button class="btn btn-primary" id="addFolderBtn">🐰 新規</button>
       </div>
       <div class="list-container" id="folderList"></div>
     </div>
@@ -343,14 +450,14 @@
       <div class="pane-header">
         <span class="pane-title" id="currentFolderName">すべてのメモ</span>
         <div style="display: flex; gap: 4px;">
-          <button class="btn" id="toggleMultiSelectBtn">選択</button>
-          <button class="btn btn-primary" id="addNoteBtn">＋ 作成</button>
+          <button class="btn" id="toggleMultiSelectBtn">✓ 選択</button>
+          <button class="btn btn-primary" id="addNoteBtn">🐇 新規</button>
         </div>
       </div>
       <!-- Batch Action Bar -->
       <div id="batchBar" style="display: none; padding: 8px 12px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); align-items: center; justify-content: space-between;">
         <select id="targetFolderSelect" style="padding: 4px; border-radius: 4px;"></select>
-        <button class="btn btn-primary" id="moveSelectedNotesBtn">移動</button>
+        <button class="btn btn-primary" id="moveSelectedNotesBtn">→ 移動</button>
       </div>
       <div class="list-container" id="noteList"></div>
     </div>
@@ -359,8 +466,8 @@
     <div class="pane editor-pane">
       <!-- Toolbar -->
       <div class="editor-toolbar">
-        <button class="btn" id="toggleReplacePanelBtn">🔍 置換</button>
-        <button class="btn" id="duplicateNoteBtn">📋 複製</button>
+        <button class="btn" id="toggleReplacePanelBtn">� 検索</button>
+        <button class="btn" id="duplicateNoteBtn">🐇 複製</button>
         <button class="btn btn-danger" id="deleteNoteBtn">🗑️ 削除</button>
         <span class="save-status" id="saveStatus">保存済み</span>
       </div>
@@ -393,34 +500,34 @@
       <h3 style="font-size: 18px;">設定 & バックアップ</h3>
 
       <div class="form-group">
-        <label style="font-size: 14px;">テーマ</label>
+        <label style="font-size: 14px;">✨ テーマ</label>
         <select id="themeSelect" class="btn">
-          <option value="light">ライト（白背景・黒文字）</option>
-          <option value="dark">ダーク（黒背景・白文字）</option>
+          <option value="light">🐰 ライト（柔らか・目に優しい）</option>
+          <option value="dark">🐇 ダーク（落ち着き・夜向き）</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label style="font-size: 14px;">文字の大きさ</label>
+        <label style="font-size: 14px;">📖 文字の大きさ</label>
         <select id="fontSizeSelect" class="btn">
-          <option value="small">小</option>
-          <option value="medium">中</option>
-          <option value="large">大</option>
+          <option value="small">小 - スッキリ</option>
+          <option value="medium">中 - ちょうどいい</option>
+          <option value="large">大 - 読みやすい</option>
         </select>
       </div>
 
       <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
 
       <div class="form-group">
-        <label style="font-size: 14px; font-weight: bold;">データバックアップ</label>
+        <label style="font-size: 14px; font-weight: bold;">💾 データバックアップ</label>
         <div style="display: flex; gap: 8px;">
-          <button class="btn" id="exportBtn" style="flex: 1;">📥 保存 (JSON)</button>
-          <button class="btn" id="importTriggerBtn" style="flex: 1;">📤 復元 (JSON)</button>
+          <button class="btn" id="exportBtn" style="flex: 1;">🐰 保存</button>
+          <button class="btn" id="importTriggerBtn" style="flex: 1;">🐇 復元</button>
           <input type="file" id="importFileInput" accept=".json" style="display: none;">
         </div>
       </div>
 
-      <button class="btn btn-primary" id="closeSettingsBtn" style="margin-top: 8px;">閉じる</button>
+      <button class="btn btn-primary" id="closeSettingsBtn" style="margin-top: 8px;">🐰 閉じる</button>
     </div>
   </div>
 
